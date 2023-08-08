@@ -493,7 +493,7 @@ const Whiteboard = ({
               <input
                 ref={uploadPdfRef}
                 hidden
-                accept="image/*,.pdf"
+                accept="image/*"
                 type="file"
                 onChange={onFileChange}
               />

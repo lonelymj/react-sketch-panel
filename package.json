@@ -1,8 +1,8 @@
 {
-  "name": "react-whiteboard-pdf",
+  "name": "react-sketch-panel",
   "version": "1.2.5",
-  "description": "React whiteboard with PDF and Images import",
-  "author": "Oleg Spiridonov <spiridonov.oa@gmail.com>",
+  "description": "React paintboard with Images import",
+  "author": "lonelymj",
   "private": false,
   "license": "MIT",
   "sideEffects": false,
@@ -10,8 +10,8 @@
   "module": "dist/index.js",
   "keywords": [
     "react",
-    "react-whiteboard",
-    "whiteboard",
+    "react-sketch",
+    "paintboard",
     "fabricjs",
     "pdf",
     "images",
@@ -26,7 +26,7 @@
   ],
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/spiridonov-oa/react-whiteboard-pdf.git"
+    "url": "git+https://github.com/lonelymj/react-sketch-panel.git"
   },
   "dependencies": {
     "fabric-all-modules": "^5.3.0",
