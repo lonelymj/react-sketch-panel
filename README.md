@@ -1,8 +1,9 @@
-# react-whiteboard-pdf
+# react-sketch-panel
 
 <div>
   <h2>
-    React virtual whiteboard with PDF and Images upload functionality
+    fork from react-whiteboard-pdf
+    add Paintboard component
     <br />
   </h2>
 </div>
@@ -17,10 +18,10 @@ Check App demo here:
 
 <br/>
 
-## If you like this project you can help us with $1,000,000 donation or any other amount
+<!-- ## If you like this project you can help us with $1,000,000 donation or any other amount
 
 github: [github.com/sponsors/spiridonov-oa](https://github.com/sponsors/spiridonov-oa)
-patreon: [patreon.com/OlegSpiridonov](https://patreon.com/OlegSpiridonov)
+patreon: [patreon.com/OlegSpiridonov](https://patreon.com/OlegSpiridonov) -->
 
 ## Compatibility
 
@@ -31,13 +32,13 @@ React 17
 ## Installation
 
 ```shell
-npm install react-whiteboard-pdf
+npm install react-sketch-panel
 ```
 
 or
 
 ```shell
-yarn add react-whiteboard-pdf
+yarn add react-sketch-panel
 ```
 
 <br/>
@@ -48,7 +49,7 @@ yarn add react-whiteboard-pdf
 const App = () => {
   return (
     <div>
-      <Whiteboard />
+      <Paintboard />
     </div>
   );
 };
@@ -57,11 +58,17 @@ const App = () => {
 You can change default props
 
 ```javascript
-import { Whiteboard } from 'react-whiteboard-pdf';
+import { Paintboard } from 'react-sketch-panel';
+
+const sizes = ['512x512','800x600','600x800','1920x1080']
 
 const App = () => {
   return (
-    <Whiteboard
+    <Paintboard
+      mode={'sketch'} // optional
+      sizes={sizes} // :string[] if mode set to 'sketch', sizes prop must be passed 
+      maxWidth={512}
+      maxHeight={512}
       // default parameters
       drawingSettings={{
         brushWidth: 5, // :number (optional) (default: 5) - brush size for drawing
@@ -74,13 +81,8 @@ const App = () => {
       // default controls
       controls={{
         PENCIL: true,
-        LINE: true,
-        RECTANGLE: true,
-        ELLIPSE: true,
-        TRIANGLE: true,
-        TEXT: true,
-        SELECT: true,
-        ERASER: true,
+        MOVE: true,
+        ERASERDRAW: true,
         CLEAR: true,
         FILL: true,
         BRUSH: true,
@@ -88,6 +90,7 @@ const App = () => {
         DEFAULT_COLORS: true,
         FILES: true,
         SAVE_AS_IMAGE: true,
+        SAVE_AS_IMAGE_WITHOUT_BACKGROUNDIMAGE: true,
         ZOOM: true,
       }}
       settings={{
@@ -129,9 +132,9 @@ npm start
 
 ## Author:
 
-[spiridonov-oa](https://github.com/spiridonov-oa)
+<!-- [spiridonov-oa](https://github.com/spiridonov-oa) -->
 
 ## Contributors:
 
-Thanks for your help in building this project
-[rodionspi](https://github.com/rodionspi)
+<!-- Thanks for your help in building this project -->
+<!-- [rodionspi](https://github.com/rodionspi) -->

@@ -3,13 +3,8 @@ import { getCursor } from './cursors';
 
 export const modes = {
   PENCIL: 'PENCIL',
-  LINE: 'LINE',
-  RECTANGLE: 'RECTANGLE',
-  TRIANGLE: 'TRIANGLE',
-  ELLIPSE: 'ELLIPSE',
-  ERASER: 'ERASER',
-  SELECT: 'SELECT',
-  TEXT: 'TEXT',
+  ERASERDRAW: 'ERASERDRAW',
+  MOVE: 'MOVE'
 };
 
 export class Board {
@@ -17,6 +12,7 @@ export class Board {
   modes;
   cursorPencil = getCursor('pencil');
   mouseDown = false;
+  mouseRightDown = false;
   drawInstance = null;
   drawingSettings;
   canvasConfig = {
@@ -61,10 +57,14 @@ export class Board {
 
     const parentElement = canvasElement.parentNode;
 
-    const canvas = new fabric.Canvas('canvas');
+    const canvas = new fabric.Canvas('canvas',{
+      fireRightClick: true, // 启用右键，button的数字为3
+      stopContextMenu: true, // 禁止默认右键菜单
+    });
     canvas.perPixelTargetFind = true;
 
     if (parentElement) {
+      const that = this;
       this.element = this.handleResize(this.resizeCanvas(canvas, parentElement).bind(this));
       this.element.observe(parentElement);
     }
@@ -85,7 +85,7 @@ export class Board {
       this.changeZoom({ scale: 1 });
     }
     this.canvas.requestRenderAll();
-    console.log(this.canvas.getObjects());
+    // console.log(this.canvas.getObjects());
     this.canvas.fire('config:chnage');
   }
 
@@ -98,16 +98,26 @@ export class Board {
     canvas.on('mouse:wheel', function (opt) {
       opt.e.preventDefault();
       opt.e.stopPropagation();
-      if (opt.e.ctrlKey) {
+      if (opt.e.shiftKey) {
         const delta = opt.e.deltaY;
         const scale = 0.995 ** delta;
         const point = { x: opt.e.offsetX, y: opt.e.offsetY };
         that.changeZoom({ point, scale });
+      } else if (opt.e.ctrlKey){
+        const currWidth = that.drawingSettings.brushWidth;
+        let delta = 1;
+        if(opt.e.deltaY>0){
+          delta = -1;
+        }
+        let scale = currWidth + delta;
+        if(0< scale && scale<=30){
+          canvas.fire('brush:change', {target:{value:scale}});
+        }
       } else {
-        const e = opt.e;
-        let vpt = canvas.viewportTransform;
-        vpt[4] -= e.deltaX;
-        vpt[5] -= e.deltaY;
+        // const e = opt.e;
+        // let vpt = canvas.viewportTransform;
+        // vpt[4] -= e.deltaX;
+        // vpt[5] -= e.deltaY;
 
         // const boundaries = that.getCanvasContentBoundaries();
 
@@ -138,12 +148,12 @@ export class Board {
 
         // console.log(vpt);
 
-        canvas.requestRenderAll();
+        // canvas.requestRenderAll();
       }
     });
 
     canvas.on('touch:gesture', (event) => {
-      console.log('1 touch:gesture');
+      // console.log('1 touch:gesture');
       if (event.e.touches && event.e.touches.length === 2) {
         const point1 = {
           x: event.e.touches[0].clientX,
@@ -157,7 +167,7 @@ export class Board {
         const prevDistance = canvas.getPointerDistance(point1, point2);
 
         canvas.on('touch:gesture', (event) => {
-          console.log('2 touch:gesture');
+          // console.log('2 touch:gesture');
           const newDistance = canvas.getPointerDistance(point1, point2);
           const zoom = newDistance / prevDistance;
 
@@ -175,6 +185,7 @@ export class Board {
         });
       }
     });
+    
   }
 
   setDrawingSettings(drawingSettings) {
@@ -213,8 +224,14 @@ export class Board {
       case this.modes.ERASER:
         this.eraserOn();
         break;
+      case this.modes.ERASERDRAW:
+        this.eraserDrawOn();
+        break;
       case this.modes.SELECT:
         this.onSelectMode();
+        break;
+      case this.modes.MOVE:
+        this.onMoveMode();
         break;
       case this.modes.TEXT:
         this.createText();
@@ -255,8 +272,8 @@ export class Board {
 
   resizeCanvas(canvas, whiteboard) {
     return function () {
-      const width = whiteboard.clientWidth;
-      const height = whiteboard.clientHeight;
+      const width = whiteboard.clientWidth - 110;
+      const height = whiteboard.clientHeight - 110;
       this.changeZoom({ scale: 1 });
       // const scale = width / canvas.getWidth();
       // const zoom = canvas.getZoom() * scale;
@@ -283,354 +300,56 @@ export class Board {
     canvas.freeDrawingCursor = this.cursorPencil;
   }
 
-  createLine() {
-    const canvas = this.canvas;
-
-    canvas.on('mouse:down', this.startAddLine().bind(this));
-    canvas.on('mouse:move', this.startDrawingLine().bind(this));
-    canvas.on('mouse:up', this.stopDrawing.bind(this));
-
-    canvas.defaultCursor = this.cursorPencil;
-    canvas.hoverCursor = this.cursorPencil;
-    canvas.discardActiveObject().requestRenderAll();
-  }
-
-  startAddLine() {
+  eraserDrawOn() {
     const canvas = this.canvas;
     const drawingSettings = this.drawingSettings;
-    return function ({ e }) {
-      this.mouseDown = true;
-
-      let pointer = canvas.getPointer(e);
-      this.drawInstance = new fabric.Line([pointer.x, pointer.y, pointer.x, pointer.y], {
-        strokeWidth: drawingSettings.brushWidth,
-        stroke: drawingSettings.currentColor,
-        selectable: false,
-      });
-
-      canvas.add(this.drawInstance);
-      canvas.requestRenderAll();
-    };
-  }
-
-  startDrawingLine() {
-    const canvas = this.canvas;
-    return function ({ e }) {
-      if (this.mouseDown) {
-        const pointer = canvas.getPointer(e);
-        this.drawInstance.set({
-          x2: pointer.x,
-          y2: pointer.y,
-        });
-        this.drawInstance.setCoords();
-        canvas.requestRenderAll();
-      }
-    };
-  }
-
-  createRect() {
-    const canvas = this.canvas;
+    canvas.freeDrawingBrush = new fabric.EraserBrush(canvas);
+    canvas.freeDrawingBrush.width = drawingSettings.brushWidth;
+    canvas.freeDrawingBrush.color = drawingSettings.currentColor;
     canvas.isDrawingMode = true;
-
-    canvas.on('mouse:down', this.startAddRect().bind(this));
-    canvas.on('mouse:move', this.startDrawingRect().bind(this));
-    canvas.on('mouse:up', this.stopDrawing.bind(this));
-
-    canvas.selection = false;
-    canvas.defaultCursor = this.cursorPencil;
-    canvas.hoverCursor = this.cursorPencil;
-    canvas.isDrawingMode = false;
-    canvas.getObjects().map((item) => item.set({ selectable: false }));
-    canvas.discardActiveObject().requestRenderAll();
-  }
-
-  startAddRect() {
-    const canvas = this.canvas;
-    const drawingSettings = this.drawingSettings;
-    return function ({ e }) {
-      this.mouseDown = true;
-
-      const pointer = canvas.getPointer(e);
-      this.origX = pointer.x;
-      this.origY = pointer.y;
-
-      this.drawInstance = new fabric.Rect({
-        stroke: drawingSettings.currentColor,
-        strokeWidth: drawingSettings.brushWidth,
-        fill: drawingSettings.fill ? drawingSettings.currentColor : 'transparent',
-        left: this.origX,
-        top: this.origY,
-        width: 0,
-        height: 0,
-        selectable: false,
-      });
-
-      canvas.add(this.drawInstance);
-
-      this.drawInstance.on(
-        'mousedown',
-        function (e) {
-          if (drawingSettings.currentMode === this.modes.ERASER) {
-            canvas.remove(e.target);
-          }
-        }.bind(this),
-      );
-    };
-  }
-
-  startDrawingRect() {
-    const canvas = this.canvas;
-    return function ({ e }) {
-      if (this.mouseDown) {
-        const pointer = canvas.getPointer(e);
-
-        if (pointer.x < this.origX) {
-          this.drawInstance.set('left', pointer.x);
-        }
-        if (pointer.y < this.origY) {
-          this.drawInstance.set('top', pointer.y);
-        }
-        this.drawInstance.set({
-          width: Math.abs(pointer.x - this.origX),
-          height: Math.abs(pointer.y - this.origY),
-        });
-        this.drawInstance.setCoords();
-        canvas.renderAll();
-      }
-    };
-  }
-
-  stopDrawing() {
-    this.mouseDown = false;
-  }
-
-  createEllipse() {
-    //main
-    const canvas = this.canvas;
-    canvas.isDrawingMode = true;
-
-    canvas.on('mouse:down', this.startAddEllipse().bind(this));
-    canvas.on('mouse:move', this.startDrawingEllipse().bind(this));
-    canvas.on('mouse:up', this.stopDrawing.bind(this));
-
-    canvas.selection = false;
-    canvas.defaultCursor = this.cursorPencil;
-    canvas.hoverCursor = this.cursorPencil;
-    canvas.isDrawingMode = false;
-    canvas.getObjects().map((item) => item.set({ selectable: false }));
-    canvas.discardActiveObject().requestRenderAll();
-  }
-
-  startAddEllipse() {
-    const canvas = this.canvas;
-    const drawingSettings = this.drawingSettings;
-    return function ({ e }) {
-      this.mouseDown = true;
-
-      const pointer = canvas.getPointer(e);
-      this.origX = pointer.x;
-      this.origY = pointer.y;
-      this.drawInstance = new fabric.Ellipse({
-        stroke: drawingSettings.currentColor,
-        strokeWidth: drawingSettings.brushWidth,
-        fill: drawingSettings.fill ? drawingSettings.currentColor : 'transparent',
-        left: this.origX,
-        top: this.origY,
-        cornerSize: 7,
-        objectCaching: false,
-        selectable: false,
-      });
-
-      canvas.add(this.drawInstance);
-    };
-  }
-
-  startDrawingEllipse() {
-    const canvas = this.canvas;
-
-    return function ({ e }) {
-      if (this.mouseDown) {
-        const pointer = canvas.getPointer(e);
-        if (pointer.x < this.origX) {
-          this.drawInstance.set('left', pointer.x);
-        }
-        if (pointer.y < this.origY) {
-          this.drawInstance.set('top', pointer.y);
-        }
-        this.drawInstance.set({
-          rx: Math.abs(pointer.x - this.origX) / 2,
-          ry: Math.abs(pointer.y - this.origY) / 2,
-        });
-        this.drawInstance.setCoords();
-        canvas.renderAll();
-      }
-    };
-  }
-
-  createTriangle() {
-    const canvas = this.canvas;
-    canvas.isDrawingMode = true;
-
-    canvas.on('mouse:down', this.startAddTriangle().bind(this));
-    canvas.on('mouse:move', this.startDrawingTriangle().bind(this));
-    canvas.on('mouse:up', this.stopDrawing.bind(this));
-
-    canvas.selection = false;
-    canvas.defaultCursor = this.cursorPencil;
-    canvas.hoverCursor = this.cursorPencil;
-    canvas.isDrawingMode = false;
-    canvas.getObjects().map((item) => item.set({ selectable: false }));
-    canvas.discardActiveObject().requestRenderAll();
-  }
-
-  startAddTriangle() {
-    const canvas = this.canvas;
-    const drawingSettings = this.drawingSettings;
-    return function ({ e }) {
-      this.mouseDown = true;
-      drawingSettings.currentMode = this.modes.TRIANGLE;
-
-      const pointer = canvas.getPointer(e);
-      this.origX = pointer.x;
-      this.origY = pointer.y;
-      this.drawInstance = new fabric.Triangle({
-        stroke: drawingSettings.currentColor,
-        strokeWidth: drawingSettings.brushWidth,
-        fill: drawingSettings.fill ? drawingSettings.currentColor : 'transparent',
-        left: this.origX,
-        top: this.origY,
-        width: 0,
-        height: 0,
-        selectable: false,
-      });
-
-      canvas.add(this.drawInstance);
-    };
-  }
-
-  startDrawingTriangle() {
-    const canvas = this.canvas;
-    return function ({ e }) {
-      if (this.mouseDown) {
-        const pointer = canvas.getPointer(e);
-        if (pointer.x < this.origX) {
-          this.drawInstance.set('left', pointer.x);
-        }
-        if (pointer.y < this.origY) {
-          this.drawInstance.set('top', pointer.y);
-        }
-        this.drawInstance.set({
-          width: Math.abs(pointer.x - this.origX),
-          height: Math.abs(pointer.y - this.origY),
-        });
-
-        this.drawInstance.setCoords();
-        canvas.renderAll();
-      }
-    };
-  }
-
-  createText() {
-    const canvas = this.canvas;
-    canvas.isDrawingMode = true;
-
-    canvas.on('mouse:down', (e) => this.addText.call(this, e));
-
-    canvas.isDrawingMode = false;
-  }
-
-  addText(e) {
-    const canvas = this.canvas;
-    const drawingSettings = this.drawingSettings;
-
-    const pointer = canvas.getPointer(e);
-    this.origX = pointer.x;
-    this.origY = pointer.y;
-    const text = new fabric.Textbox('', {
-      left: this.origX - 10,
-      top: this.origY - 10,
-      fontSize: drawingSettings.brushWidth * 3 + 10,
-      fill: drawingSettings.currentColor,
-      editable: true,
-      perPixelTargetFind: false,
-      keysMap: {
-        13: 'exitEditing',
-      },
-    });
-
-    canvas.add(text);
-    canvas.renderAll();
-
-    text.enterEditing();
-
-    this.editedTextObject = text;
-
-    canvas.off('mouse:down');
-    canvas.once(
-      'mouse:down',
-      function (e1) {
-        if (text.isEditing) {
-          text.exitEditing();
-          this.editedTextObject = null;
-          canvas.once('mouse:down', (e2) => {
-            this.addText.call(this, e2);
-          });
-        } else {
-          this.addText.call(this, e1);
-        }
-      }.bind(this),
-    );
-  }
-
-  eraserOn() {
-    const canvas = this.canvas;
-    canvas.isDrawingMode = false;
-
-    canvas.on('mouse:down', (event) => {
-      canvas.remove(event.target);
-
-      canvas.on('mouse:move', (e) => {
-        canvas.remove(e.target);
-      });
-    });
-
-    canvas.on('mouse:up', () => {
-      canvas.off('mouse:move');
-    });
-
-    canvas.on('mouse:over', (event) => {
-      const hoveredObject = event.target;
-      console.log(hoveredObject);
-      if (hoveredObject) {
-        hoveredObject.set({
-          opacity: 0.2,
-        });
-        canvas.requestRenderAll();
-      }
-    });
-
-    canvas.on('mouse:out', (event) => {
-      const hoveredObject = event.target;
-      if (hoveredObject) {
-        hoveredObject.set({
-          opacity: 1,
-        });
-        canvas.requestRenderAll();
-      }
-    });
-
+    canvas.freeDrawingCursor = getCursor('eraser');
+    
     canvas.defaultCursor = getCursor('eraser');
-    canvas.hoverCursor = getCursor('eraser');
+    // canvas.hoverCursor = getCursor('eraser');
   }
-
-  onSelectMode() {
+  
+  onMoveMode() {
     const canvas = this.canvas;
-    const drawingSettings = this.drawingSettings;
-    drawingSettings.currentMode = '';
     canvas.isDrawingMode = false;
-
-    canvas.getObjects().map((item) => item.set({ selectable: true }));
-    canvas.hoverCursor = 'all-scroll';
+    const drawingSettings = this.drawingSettings;
+    canvas.on('mouse:down', function (opt) {
+      var evt = opt.e;
+      // if (evt.altKey === true) {
+        this.isDragging = true
+        this.lastPosX = evt.clientX
+        this.lastPosY = evt.clientY
+        
+        canvas.defaultCursor = 'all-scroll';
+        canvas.hoverCursor = 'all-scroll';
+      // }
+    });
+  
+    // 移动鼠标事件
+    canvas.on('mouse:move', function (opt) {
+      if (this.isDragging) {
+        var e = opt.e;
+        var vpt = this.viewportTransform;
+        vpt[4] += e.clientX - this.lastPosX
+        vpt[5] += e.clientY - this.lastPosY
+        this.requestRenderAll()
+        this.lastPosX = e.clientX
+        this.lastPosY = e.clientY
+      }
+    });
+  
+    // 松开鼠标事件
+    canvas.on('mouse:up', function (opt) {
+      this.setViewportTransform(this.viewportTransform)
+      this.isDragging = false
+      
+      canvas.defaultCursor = 'auto';
+      canvas.hoverCursor = 'all-scroll';
+    });
   }
 
   clearCanvas() {
@@ -661,8 +380,13 @@ export class Board {
   }
 
   resetZoom() {
+    var vpt = this.canvas.viewportTransform;
+    vpt[4] = 0;
+    vpt[5] = 0;
     const width = this.canvas.width;
     const height = this.canvas.height;
+    // console.log(width);
+    // console.log(height);
     const point = { x: width / 2, y: height / 2 };
     const scale = 1;
     this.canvas.zoomToPoint(point, scale);

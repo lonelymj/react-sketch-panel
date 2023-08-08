@@ -29,7 +29,7 @@
     "url": "git+https://github.com/spiridonov-oa/react-whiteboard-pdf.git"
   },
   "dependencies": {
-    "fabric": "^5.3.0",
+    "fabric-all-modules": "^5.3.0",
     "file-saver": "^2.0.5",
     "prop-types": "^15.8.1",
     "react-pdf": "^5.3.2",

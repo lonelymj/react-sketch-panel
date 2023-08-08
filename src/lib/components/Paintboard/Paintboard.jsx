@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import PropTypes from 'prop-types';
 import {
-  WhiteBoardS,
+  PaintPanelS,
   ButtonS,
   ToolbarS,
   ZoomBarS,
@@ -12,7 +12,10 @@ import {
   SeparatorS,
   ToolbarHolderS,
   PDFWrapperS,
-} from './Whiteboard.styled';
+  DrawPanelS,
+  SelectS,
+  OptionS,
+} from './Paintboard.styled';
 import { fabric } from 'fabric-all-modules';
 import { PdfReader } from '../PdfReader';
 import { saveAs } from 'file-saver';
@@ -56,6 +59,10 @@ const initSettings = {
 };
 
 const Whiteboard = ({
+  mode,
+  maxWidth = 800,
+  maxHeight = 800,
+  sizes,
   controls,
   settings,
   drawingSettings,
@@ -87,18 +94,14 @@ const Whiteboard = ({
   const canvasRef = useRef(null);
   const whiteboardRef = useRef(null);
   const uploadPdfRef = useRef(null);
+  const rangeInput = useRef(null);
 
   const enabledControls = useMemo(
     function () {
       return {
         [modes.PENCIL]: true,
-        [modes.LINE]: true,
-        [modes.RECTANGLE]: true,
-        [modes.ELLIPSE]: true,
-        [modes.TRIANGLE]: true,
-        [modes.TEXT]: true,
-        [modes.SELECT]: true,
-        [modes.ERASER]: true,
+        [modes.MOVE]: true,
+        [modes.ERASERDRAW]: true,
         CLEAR: true,
         FILL: true,
         BRUSH: true,
@@ -106,6 +109,7 @@ const Whiteboard = ({
         DEFAULT_COLORS: true,
         FILES: true,
         SAVE_AS_IMAGE: true,
+        SAVE_AS_IMAGE_WITHOUT_BACKGROUNDIMAGE: true,
         ZOOM: true,
 
         ...controls,
@@ -179,11 +183,31 @@ const Whiteboard = ({
   function uploadImage(e) {
     const reader = new FileReader();
     const file = e.target.files[0];
-
+    
     reader.addEventListener('load', () => {
       fabric.Image.fromURL(reader.result, (img) => {
-        img.scaleToHeight(board.canvas.height);
-        board.canvas.add(img);
+        // img.scaleToHeight(board.canvas.height);
+        // board.canvas.width=img.width;
+        // board.canvas.height=img.height;
+        
+        // board.setCanvasConfig(state=>{return {...canvasConfig,...{width:img.width,height:img.height}}});
+
+        // board.canvas.add(img);
+        // board.setWidth(img.width);
+        // board.setHeight(img.height);
+        const imgWidth = img.width,imgHeight = img.height;
+        let ratio = 1;
+        if(imgWidth>imgHeight){
+          ratio = maxWidth/imgWidth;
+        }else{
+          ratio = maxHeight/imgHeight;
+        }
+        board.canvas.setWidth(img.width*ratio);
+        board.canvas.setHeight(img.height*ratio);
+        img.scaleToHeight(img.height*ratio);
+        board.canvas.setBackgroundImage(img, board.canvas.renderAll.bind(board.canvas));
+        
+        board.canvas.get("backgroundImage")?.set({ erasable: false });
       });
     });
 
@@ -199,6 +223,10 @@ const Whiteboard = ({
     canvas.on('zoom:change', function (data) {
       onZoom(data, null, canvas);
       setZoom(data.scale);
+    });
+
+    canvas.on('brush:change', function (data) {
+      changeBrushWidth(data, canvas);
     });
 
     canvas.on('object:added', (event) => {
@@ -242,12 +270,18 @@ const Whiteboard = ({
     onSaveCanvasState(newValue);
   }
 
-  function changeBrushWidth(e) {
+  function changeBrushWidth(e,canvas) {
     const intValue = parseInt(e.target.value);
-    board.canvas.freeDrawingBrush.width = intValue;
     const newOptions = { ...canvasDrawingSettings, brushWidth: intValue };
     setCanvasDrawingSettings(newOptions);
-    onOptionsChange(newOptions, e, board.canvas);
+    
+    if(canvas){
+      canvas.freeDrawingBrush.width = intValue;
+      onOptionsChange(newOptions, e, canvas);
+    }else{
+      board.canvas.freeDrawingBrush.width = intValue;
+      onOptionsChange(newOptions, e, board.canvas);
+    }
   }
 
   function changeMode(mode, e) {
@@ -270,16 +304,38 @@ const Whiteboard = ({
     onOptionsChange(newOptions, e, board.canvas);
   }
 
+  // 保存图片
   function handleSaveCanvasAsImage() {
+    const backgroundImage = board.canvas.backgroundImage;
+    board.resetZoom();
+    board.canvas.setBackgroundImage(null);
+    board.canvas.renderAll();
+
     canvasRef.current.toBlob(function (blob) {
       saveAs(blob, `${fileReaderInfo.file.name}${fileReaderInfo.currentPage ? '_page-' : ''}.png`);
       onSaveCanvasAsImage(blob, null, board.canvas);
     });
+    board.canvas.setBackgroundImage(backgroundImage);
+    board.canvas.renderAll();
+  }
+
+  
+
+  // 保存图片
+  function handleSaveCanvasAsImageWithBackgroundImage() {
+    const backgroundImage = board.canvas.backgroundImage;
+    board.resetZoom();
+
+    canvasRef.current.toBlob(function (blob) {
+      saveAs(blob, `${fileReaderInfo.file.name}${fileReaderInfo.currentPage ? '_page-' : ''}.png`);
+      onSaveCanvasAsImage(blob, null, board.canvas);
+    });
+    board.canvas.setBackgroundImage(backgroundImage);
+    board.canvas.renderAll();
   }
 
   function onFileChange(event) {
     if (!event.target.files[0]) return;
-
     if (event.target.files[0].type.includes('image/')) {
       uploadImage(event);
       onImageUploaded(event.target.files[0], event, board.canvas);
@@ -289,6 +345,23 @@ const Whiteboard = ({
       updateFileReaderInfo({ file: event.target.files[0], currentPageNumber: 1 });
       onPDFUploaded(event.target.files[0], event, board.canvas);
     }
+    event.target.value = '';
+  }
+
+  function sketchSizeChange(e){
+    console.log(e.target.value);
+    const values = e.target.value.split('x');
+    const width = values[0], height = values[1];
+    let ratio = 1;
+    if(width>height){
+      ratio = maxWidth / width;
+    }else{
+      ratio = maxHeight / height;
+    }
+    board.resetZoom();
+    board.canvas.setWidth(width*ratio);
+    board.canvas.setHeight(height*ratio);
+    board.canvas.renderAll();
   }
 
   function getPageJSON({ fileName, pageNumber }) {
@@ -335,13 +408,8 @@ const Whiteboard = ({
   const getControls = () => {
     const modeButtons = {
       [modes.PENCIL]: { icon: PencilIcon, name: 'Pencil' },
-      [modes.LINE]: { icon: LineIcon, name: 'Line' },
-      [modes.RECTANGLE]: { icon: RectangleIcon, name: 'Rectangle' },
-      [modes.ELLIPSE]: { icon: EllipseIcon, name: 'Ellipse' },
-      [modes.TRIANGLE]: { icon: TriangleIcon, name: 'Triangle' },
-      [modes.TEXT]: { icon: TextIcon, name: 'Text' },
-      [modes.SELECT]: { icon: SelectIcon, name: 'Select' },
-      [modes.ERASER]: { icon: EraserIcon, name: 'Eraser' },
+      [modes.MOVE]: { icon: SelectIcon, name: 'Move' },
+      [modes.ERASERDRAW]: { icon: EraserIcon, name: 'EraserDraw' },
     };
 
     return Object.keys(modeButtons).map((buttonKey) => {
@@ -361,7 +429,8 @@ const Whiteboard = ({
   };
 
   return (
-    <WhiteBoardS ref={whiteboardRef}>
+    // <div style={{height: '800px', width: '600px'}}>
+    <PaintPanelS ref={whiteboardRef} height={'800px'} width={'800px'} >
       <ToolbarHolderS>
         <ColorBarS>
           {!!enabledControls.COLOR_PICKER && (
@@ -376,6 +445,7 @@ const Whiteboard = ({
           {!!enabledControls.BRUSH && (
             <ToolbarItemS>
               <RangeInputS
+                ref={rangeInput}
                 type="range"
                 min={1}
                 max={30}
@@ -400,6 +470,14 @@ const Whiteboard = ({
           )}
         </ColorBarS>
         <ToolbarS>
+          {mode==='sketch' && sizes && (
+            <SelectS onChange={sketchSizeChange}>
+              {sizes.map(item=>(
+                <OptionS key={item}>{item}</OptionS>
+              ))}
+            </SelectS>
+          )}
+
           {getControls()}
 
           {!!enabledControls.CLEAR && (
@@ -432,6 +510,14 @@ const Whiteboard = ({
               </ButtonS>
             </ToolbarItemS>
           )}
+
+          {!!enabledControls.SAVE_AS_IMAGE_WITHOUT_BACKGROUNDIMAGE && (
+            <ToolbarItemS>
+              <ButtonS onClick={handleSaveCanvasAsImageWithBackgroundImage}>
+                <img src={DownloadIcon} alt="Download" />
+              </ButtonS>
+            </ToolbarItemS>
+          )}
         </ToolbarS>
         <ZoomBarS>
           {!!enabledControls.ZOOM && (
@@ -459,8 +545,9 @@ const Whiteboard = ({
           )}
         </ZoomBarS>
       </ToolbarHolderS>
-
-      <canvas ref={canvasRef} id="canvas" />
+      <DrawPanelS>
+        <canvas ref={canvasRef} id="canvas" />
+      </DrawPanelS>
       <PDFWrapperS>
         <PdfReader
           fileReaderInfo={fileReaderInfo}
@@ -468,7 +555,8 @@ const Whiteboard = ({
           updateFileReaderInfo={updateFileReaderInfo}
         />
       </PDFWrapperS>
-    </WhiteBoardS>
+    </PaintPanelS>
+    // </div>
   );
 };
 
