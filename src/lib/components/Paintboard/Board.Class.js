@@ -86,7 +86,7 @@ export class Board {
     }
     this.canvas.requestRenderAll();
     // console.log(this.canvas.getObjects());
-    this.canvas.fire('config:chnage');
+    this.canvas.fire('config:change');
   }
 
   addZoomListeners() {
@@ -111,7 +111,7 @@ export class Board {
         }
         let scale = currWidth + delta;
         if(0< scale && scale<=30){
-          canvas.fire('brush:change', {target:{value:scale}});
+          canvas.fire('brush:change', {target:{value:scale}, currentMode:that.drawingSettings.currentMode});
         }
       } else {
         // const e = opt.e;
@@ -385,8 +385,7 @@ export class Board {
     vpt[5] = 0;
     const width = this.canvas.width;
     const height = this.canvas.height;
-    // console.log(width);
-    // console.log(height);
+    
     const point = { x: width / 2, y: height / 2 };
     const scale = 1;
     this.canvas.zoomToPoint(point, scale);

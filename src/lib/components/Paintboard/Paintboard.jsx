@@ -24,11 +24,6 @@ import { ColorPicker } from '../ColorPicker';
 
 import SelectIcon from './../images/cross.svg';
 import EraserIcon from './../images/eraser.svg';
-import TextIcon from './../images/text.svg';
-import RectangleIcon from './../images/rectangle.svg';
-import LineIcon from './../images/line.svg';
-import EllipseIcon from './../images/ellipse.svg';
-import TriangleIcon from './../images/triangle.svg';
 import PencilIcon from './../images/pencil.svg';
 import DeleteIcon from './../images/delete.svg';
 import ZoomInIcon from './../images/zoom-in.svg';
@@ -42,6 +37,10 @@ const initFileInfo = {
   totalPages: 1,
   currentPageNumber: 0,
   currentPage: '',
+  saveAsWidth: 512,
+  saveAsHeight: 512,
+  displayWidth: 512,
+  displayHeight: 512
 };
 
 const initDrawingSettings = {
@@ -63,6 +62,7 @@ const Whiteboard = ({
   maxWidth = 800,
   maxHeight = 800,
   sizes,
+  backgroundImage,
   controls,
   settings,
   drawingSettings,
@@ -79,6 +79,7 @@ const Whiteboard = ({
   onPageChange = (data, event, canvas) => {},
   onOptionsChange = (data, event, canvas) => {},
   onSaveCanvasAsImage = (data, event, canvas) => {},
+  onExportBlob = (data, event, canvas) => {},
   onConfigChange = (data, event, canvas) => {},
   onSaveCanvasState = (data, event, canvas) => {},
 }) => {
@@ -110,6 +111,8 @@ const Whiteboard = ({
         FILES: true,
         SAVE_AS_IMAGE: true,
         SAVE_AS_IMAGE_WITHOUT_BACKGROUNDIMAGE: true,
+        EXPORT_IMAGE: true,
+        EXPORT_IMAGE_WITHOUT_BACKGROUNDIMAGE: true,
         ZOOM: true,
 
         ...controls,
@@ -180,21 +183,18 @@ const Whiteboard = ({
     }
   }, [fileReaderInfo.currentPage]);
 
+  useEffect(()=>{
+    if (!board) return;
+
+    setImage(backgroundImage);
+  },[board, backgroundImage])
+
   function uploadImage(e) {
     const reader = new FileReader();
     const file = e.target.files[0];
     
     reader.addEventListener('load', () => {
       fabric.Image.fromURL(reader.result, (img) => {
-        // img.scaleToHeight(board.canvas.height);
-        // board.canvas.width=img.width;
-        // board.canvas.height=img.height;
-        
-        // board.setCanvasConfig(state=>{return {...canvasConfig,...{width:img.width,height:img.height}}});
-
-        // board.canvas.add(img);
-        // board.setWidth(img.width);
-        // board.setHeight(img.height);
         const imgWidth = img.width,imgHeight = img.height;
         let ratio = 1;
         if(imgWidth>imgHeight){
@@ -202,16 +202,44 @@ const Whiteboard = ({
         }else{
           ratio = maxHeight/imgHeight;
         }
+        board.canvas.setWidth(imgWidth*ratio);
+        board.canvas.setHeight(imgHeight*ratio);
+        img.scaleToHeight(imgHeight*ratio);
+        board.canvas.setBackgroundImage(img, board.canvas.renderAll.bind(board.canvas));
+        
+        board.canvas.get("backgroundImage")?.set({ erasable: false });
+        setFileReaderInfo(state=>{
+          return { ...state, ...{ saveAsWidth: imgWidth, saveAsHeight: imgHeight, displayWidth: imgWidth*ratio, displayHeight: imgHeight*ratio } };
+        });
+      });
+    });
+
+    reader.readAsDataURL(file);
+  }
+
+  function setImage(imageData) {
+    const image = new Image();
+    image.addEventListener('load', (e) => {
+      fabric.Image.fromObject(image, (img) => {
+        const imgWidth = img.width,imgHeight = img.height;
+        let ratio = 1;
+        if(imgWidth>imgHeight){
+          ratio = maxWidth / imgWidth;
+        }else{
+          ratio = maxHeight / imgHeight;
+        }
         board.canvas.setWidth(img.width*ratio);
         board.canvas.setHeight(img.height*ratio);
         img.scaleToHeight(img.height*ratio);
         board.canvas.setBackgroundImage(img, board.canvas.renderAll.bind(board.canvas));
         
         board.canvas.get("backgroundImage")?.set({ erasable: false });
+        setFileReaderInfo(state=>{
+          return { ...state, ...{ saveAsWidth: imgWidth, saveAsHeight: imgHeight, displayWidth: imgWidth*ratio, displayHeight: imgHeight*ratio } };
+        });
       });
     });
-
-    reader.readAsDataURL(file);
+    image.src=imageData;
   }
 
   function addListeners(canvas) {
@@ -270,11 +298,11 @@ const Whiteboard = ({
     onSaveCanvasState(newValue);
   }
 
-  function changeBrushWidth(e,canvas) {
+  function changeBrushWidth(e, canvas) {
     const intValue = parseInt(e.target.value);
-    const newOptions = { ...canvasDrawingSettings, brushWidth: intValue };
+    const newOptions = { ...canvasDrawingSettings, brushWidth: intValue, ...(e.currentMode && {currentMode:e.currentMode}) };
     setCanvasDrawingSettings(newOptions);
-    
+
     if(canvas){
       canvas.freeDrawingBrush.width = intValue;
       onOptionsChange(newOptions, e, canvas);
@@ -288,6 +316,7 @@ const Whiteboard = ({
     if (canvasDrawingSettings.currentMode === mode) return;
     const newOptions = { ...canvasDrawingSettings, currentMode: mode };
     setCanvasDrawingSettings(newOptions);
+    board.setDrawingMode(mode);
     onOptionsChange(newOptions, e, board.canvas);
   }
 
@@ -306,8 +335,33 @@ const Whiteboard = ({
 
   // 保存图片
   function handleSaveCanvasAsImage() {
+    board.resetZoom();
+    board.resetZoom();
+    board.changeZoom({point:{ x: 0, y: 0 }, scale: fileReaderInfo.saveAsWidth / fileReaderInfo.displayWidth });
+    board.canvas.setWidth(fileReaderInfo.saveAsWidth);
+    board.canvas.setHeight(fileReaderInfo.saveAsHeight);
+    board.canvas.renderAll();
+
+    canvasRef.current.toBlob(function (blob) {
+      saveAs(blob, `${fileReaderInfo.file.name}${fileReaderInfo.currentPage ? '_page-' : ''}.png`);
+      onSaveCanvasAsImage(blob, null, board.canvas);
+    });
+    
+    board.changeZoom({point:{ x: 0, y: 0 }, scale: fileReaderInfo.displayWidth / fileReaderInfo.saveAsWidth  });
+    board.canvas.setWidth(fileReaderInfo.displayWidth);
+    board.canvas.setHeight(fileReaderInfo.displayHeight);
+    board.resetZoom();
+    board.canvas.renderAll();
+  }  
+
+  // 保存图片去除背景
+  function handleSaveCanvasAsImageWithoutBackgroundImage() {
     const backgroundImage = board.canvas.backgroundImage;
     board.resetZoom();
+    board.resetZoom();
+    board.changeZoom({point:{ x: 0, y: 0 }, scale: fileReaderInfo.saveAsWidth / fileReaderInfo.displayWidth });
+    board.canvas.setWidth(fileReaderInfo.saveAsWidth);
+    board.canvas.setHeight(fileReaderInfo.saveAsHeight);
     board.canvas.setBackgroundImage(null);
     board.canvas.renderAll();
 
@@ -315,21 +369,51 @@ const Whiteboard = ({
       saveAs(blob, `${fileReaderInfo.file.name}${fileReaderInfo.currentPage ? '_page-' : ''}.png`);
       onSaveCanvasAsImage(blob, null, board.canvas);
     });
+    board.changeZoom({point:{ x: 0, y: 0 }, scale: fileReaderInfo.displayWidth / fileReaderInfo.saveAsWidth  });
+    board.canvas.setWidth(fileReaderInfo.displayWidth);
+    board.canvas.setHeight(fileReaderInfo.displayHeight);
+    board.resetZoom();
     board.canvas.setBackgroundImage(backgroundImage);
     board.canvas.renderAll();
   }
 
-  
+  // 导出图片
+  function handleExportBlob() {
+    board.resetZoom();
+    board.resetZoom();
+    board.changeZoom({point:{ x: 0, y: 0 }, scale: fileReaderInfo.saveAsWidth / fileReaderInfo.displayWidth });
+    board.canvas.setWidth(fileReaderInfo.saveAsWidth);
+    board.canvas.setHeight(fileReaderInfo.saveAsHeight);
+    board.canvas.renderAll();
 
-  // 保存图片
-  function handleSaveCanvasAsImageWithBackgroundImage() {
+    var dataURL = canvasRef.current.toDataURL("image/png");
+    onExportBlob(dataURL, null, board.canvas);
+    
+    board.changeZoom({point:{ x: 0, y: 0 }, scale: fileReaderInfo.displayWidth / fileReaderInfo.saveAsWidth  });
+    board.canvas.setWidth(fileReaderInfo.displayWidth);
+    board.canvas.setHeight(fileReaderInfo.displayHeight);
+    board.resetZoom();
+    board.canvas.renderAll();
+  }  
+
+  // 导出图片去除背景
+  function handleExportBlobWithoutBackgroundImage() {
     const backgroundImage = board.canvas.backgroundImage;
     board.resetZoom();
+    board.resetZoom();
+    board.changeZoom({point:{ x: 0, y: 0 }, scale: fileReaderInfo.saveAsWidth / fileReaderInfo.displayWidth });
+    board.canvas.setWidth(fileReaderInfo.saveAsWidth);
+    board.canvas.setHeight(fileReaderInfo.saveAsHeight);
+    board.canvas.setBackgroundImage(null);
+    board.canvas.renderAll();
 
-    canvasRef.current.toBlob(function (blob) {
-      saveAs(blob, `${fileReaderInfo.file.name}${fileReaderInfo.currentPage ? '_page-' : ''}.png`);
-      onSaveCanvasAsImage(blob, null, board.canvas);
-    });
+    var dataURL = canvasRef.current.toDataURL("image/png");
+    onExportBlob(dataURL, null, board.canvas);
+    
+    board.changeZoom({point:{ x: 0, y: 0 }, scale: fileReaderInfo.displayWidth / fileReaderInfo.saveAsWidth  });
+    board.canvas.setWidth(fileReaderInfo.displayWidth);
+    board.canvas.setHeight(fileReaderInfo.displayHeight);
+    board.resetZoom();
     board.canvas.setBackgroundImage(backgroundImage);
     board.canvas.renderAll();
   }
@@ -513,7 +597,23 @@ const Whiteboard = ({
 
           {!!enabledControls.SAVE_AS_IMAGE_WITHOUT_BACKGROUNDIMAGE && (
             <ToolbarItemS>
-              <ButtonS onClick={handleSaveCanvasAsImageWithBackgroundImage}>
+              <ButtonS onClick={handleSaveCanvasAsImageWithoutBackgroundImage}>
+                <img src={DownloadIcon} alt="Download" />
+              </ButtonS>
+            </ToolbarItemS>
+          )}
+
+          {!!enabledControls.EXPORT_IMAGE && (
+            <ToolbarItemS>
+              <ButtonS onClick={handleExportBlob}>
+                <img src={DownloadIcon} alt="Download" />
+              </ButtonS>
+            </ToolbarItemS>
+          )}
+
+          {!!enabledControls.EXPORT_IMAGE_WITHOUT_BACKGROUNDIMAGE && (
+            <ToolbarItemS>
+              <ButtonS onClick={handleExportBlobWithoutBackgroundImage}>
                 <img src={DownloadIcon} alt="Download" />
               </ButtonS>
             </ToolbarItemS>
