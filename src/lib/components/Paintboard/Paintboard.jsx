@@ -57,7 +57,7 @@ const initSettings = {
   contentJSON: null,
 };
 
-const Whiteboard = ({
+const Paintboard = ({
   mode,
   maxWidth = 800,
   maxHeight = 800,
@@ -423,6 +423,7 @@ const Whiteboard = ({
     if (event.target.files[0].type.includes('image/')) {
       uploadImage(event);
       onImageUploaded(event.target.files[0], event, board.canvas);
+      board.resetZoom();
     } else if (event.target.files[0].type.includes('pdf')) {
       saveCanvasState();
       board.clearCanvas();
@@ -514,7 +515,7 @@ const Whiteboard = ({
 
   return (
     // <div style={{height: '800px', width: '600px'}}>
-    <PaintPanelS ref={whiteboardRef} height={'800px'} width={'800px'} >
+    <PaintPanelS ref={whiteboardRef}  width={`${maxWidth}px`} height={`${maxHeight}px`} >
       <ToolbarHolderS>
         <ColorBarS>
           {!!enabledControls.COLOR_PICKER && (
@@ -660,8 +661,8 @@ const Whiteboard = ({
   );
 };
 
-Whiteboard.propTypes = {
+Paintboard.propTypes = {
   aspectRatio: PropTypes.number,
 };
 
-export default Whiteboard;
+export default Paintboard;
